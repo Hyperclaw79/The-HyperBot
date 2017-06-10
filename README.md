@@ -26,7 +26,7 @@ Commands can be listed using the H!help command.
 Download the bot, set the dependencies up, then run `runbot.bat`! (or `run.sh` on mac/linux)  Read the tutorial if you don't know what to do.
 
 
-###P.S. The commands under the MusicBot section, some in Misc section, some in Owner_Only section and in unsegmented sections are all native code from the Open Source MusicBot. Kudos to Daniel (imayhaveborkedit) for making this amazing bot.
+P.S. The commands under the MusicBot section, some in Misc section, some in Owner_Only section and in unsegmented sections are all native code from the Open Source MusicBot. Kudos to Daniel (imayhaveborkedit) for making this amazing bot.
 Follow him here: https://github.com/imayhaveborkedit 
 
 Link to MusicBot which I used as my base:
