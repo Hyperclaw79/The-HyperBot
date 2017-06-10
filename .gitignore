@@ -6,6 +6,6 @@ audio_cache/
 dectalk/
 
 discord.log
-config/options.ini
-config/permissions.ini
+config/example_options.ini
+config/example_permissions.ini
 HyperBot/bot old.py
