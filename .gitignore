@@ -7,7 +7,4 @@ dectalk/
 
 discord.log
 
-bot_files/users.json
-bot_files/user_profiles.json
-bot_files/user_profiles_bkp.json
-bot_files/rpg/rpg.json
+*.json
