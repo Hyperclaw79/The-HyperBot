@@ -412,7 +412,7 @@ class HyperBot(discord.Client):
             last_np_msg = self.server_specific_data[channel.server]['last_np_msg']
             if last_np_msg and last_np_msg.channel == channel:
 
-                async for lmsg in self.logs_from(channel, limit=1):
+                for lmsg in self.logs_from(channel, limit=1):
                     if lmsg != last_np_msg and last_np_msg:
                         await self.safe_delete_message(last_np_msg)
                         self.server_specific_data[channel.server]['last_np_msg'] = None
@@ -619,22 +619,33 @@ class HyperBot(discord.Client):
             self.init_ok = True
             self.safe_print('Bot:   %s/%s#%s' % (self.user.id, self.user.name, self.user.discriminator))
         owner = self._get_owner(voice=True) or self._get_owner()
-        if owner and self.servers:
-            self.safe_print('Owner: %s/%s#%s\n' % (owner.id, owner.name, owner.discriminator))
-            print('Server List:')
-            [self.safe_print(' - ' + s.name) for s in self.servers]
-        else:
-            if self.servers:
-                print('Owner could not be found on any server (id: %s)\n' % self.config.owner_id)
-                print('Server List:')
-                [self.safe_print(' - ' + s.name) for s in self.servers]
-            else:
-                print('Owner unknown, bot is not on any servers.')
-                if self.user.bot:
+        try:
+           if owner and self.servers:
+              self.safe_print('Owner: %s/%s#%s\n' % (owner.id, owner.name, owner.discriminator))
+              print('Server List:')
+              for s in self.servers:
+                 try:
+                    self.safe_print(' - ' + s.name)
+                 except:
+                    print("Bot probably lagged. Couldn't fetch the server.")
+           else:
+              if self.servers:
+                 print('Owner could not be found on any server (id: %s)\n' % self.config.owner_id)
+                 print('Server List:')
+                 for s in self.servers:
+                    try:
+                       self.safe_print(' - ' + s.name)
+                    except:
+                       print("Bot probably lagged. Couldn't fetch the server.") 
+              else:
+                 print('Owner unknown, bot is not on any servers.')
+                 if self.user.bot:
                     print('\nTo make the bot join a server, paste this link in your browser.')
                     print('Note: You should be logged into your main account and have \nmanage server permissions on the server you want the bot to join.\n')
                     print('    ' + await (self.generate_invite_link()))
-            print()
+           print()
+        except	:
+           print("Bot probably lagged. Couldn't fetch any servers.\n")		   
         if self.config.bound_channels:
            chlist = set((self.get_channel(i) for i in self.config.bound_channels if i))
            chlist.discard(None)
@@ -1367,9 +1378,9 @@ class HyperBot(discord.Client):
             {command_prefix}perms
         
         Sends the user a list of their permissions.
+		Misc.
         """
-        lines = [
-         'Command permissions in %s\n' % server.name, '```', '```']
+        lines = ['Command permissions in %s\n' % server.name, '```', '```']
         for perm in permissions.__dict__:
             if not perm in ('user_list', ):
                 if permissions.__dict__[perm] == set():
@@ -1405,16 +1416,17 @@ class HyperBot(discord.Client):
                     atc = getattr(self, att)
                     try:
                         print(atc.__doc__ + '\n')
-                        cmdc[att] = dedent(atc.__doc__.split('\n ')[3])
+                        cmdc[att] = dedent(atc.__doc__.split('\n')[4])
                     except:
                         print('No docstring written for: ' + att)
-
+            comlen = len(cmdc)
+            msg5 = await self.send_message(message.channel, '__Total number of commands__: **%d**' % comlen)
             count = 0
             for att in cmdc:
                 count += 1
-                if count < 17:
+                if count < 15:
                     txt1 += dedent('```md\n<%s>```' % att.replace('cmd_', self.config.command_prefix) + '```diff\n-%s```\n' % cmdc[att])
-                elif count > 17 and count < 25:
+                elif count > 15 and count < 30:
                     txt2 += dedent('```md\n<%s>```' % att.replace('cmd_', self.config.command_prefix) + '```diff\n-%s```\n' % cmdc[att])
                 else:
                     txt3 += dedent('```md\n<%s>```' % att.replace('cmd_', self.config.command_prefix) + '```diff\n-%s```\n' % cmdc[att])
@@ -1424,6 +1436,7 @@ class HyperBot(discord.Client):
             msg4 = await (self.send_message(message.channel, txt3))
             await asyncio.sleep(300)
             await self.delete_message(msg1)
+            await self.delete_message(msg5)
             await self.delete_message(msg2)
             await self.delete_message(msg3)
             await self.delete_message(msg4)
@@ -1790,84 +1803,138 @@ class HyperBot(discord.Client):
            self.safe_print('Ignoring command from myself (%s)' % message.content)
            return
         if self.config.bound_channels and message.channel.id not in self.config.bound_channels and not message.channel.is_private:
-           return
-        command, *args = message_content.split()
+            return  # if I want to log this I just move it under the prefix check
+
+        command, *args = message_content.split()  # Uh, doesn't this break prefixes with spaces in them (it doesn't, config parser already breaks them)
         command = command[len(self.config.command_prefix):].lower().strip()
+
         handler = getattr(self, 'cmd_%s' % command, None)
         if not handler:
-           return
+            return
+
         if message.channel.is_private:
-           if not (message.author.id == self.config.owner_id and command == 'joinserver'):
-              await self.send_message(message.channel, 'You cannot use this bot in private messages.')
-              return
+            if not (message.author.id == self.config.owner_id and command == 'joinserver'):
+                await self.send_message(message.channel, 'You cannot use this bot in private messages.')
+                return
+
         if message.author.id in self.blacklist and message.author.id != self.config.owner_id:
-          self.safe_print('[User blacklisted] {0.id}/{0.name} ({1})'.format(message.author, message_content))
-          return
-        self.safe_print('[Command] {0.id}/{0.name} ({1})'.format(message.author, message_content))
+            self.safe_print("[User blacklisted] {0.id}/{0.name} ({1})".format(message.author, message_content))
+            return
+
+        else:
+            self.safe_print("[Command] {0.id}/{0.name} ({1})".format(message.author, message_content))
+
         user_permissions = self.permissions.for_user(message.author)
+
         argspec = inspect.signature(handler)
         params = argspec.parameters.copy()
-        try:			
+
+        # noinspection PyBroadException
+        try:
             if user_permissions.ignore_non_voice and command in user_permissions.ignore_non_voice:
                 await self._check_ignore_non_voice(message)
-                handler_kwargs = {}
+
+            handler_kwargs = {}
             if params.pop('message', None):
                 handler_kwargs['message'] = message
+
             if params.pop('channel', None):
                 handler_kwargs['channel'] = message.channel
+
             if params.pop('author', None):
                 handler_kwargs['author'] = message.author
+
             if params.pop('server', None):
                 handler_kwargs['server'] = message.server
+
             if params.pop('player', None):
-                handler_kwargs['player'] = await (self.get_player(message.channel))
+                handler_kwargs['player'] = await self.get_player(message.channel)
+
             if params.pop('permissions', None):
                 handler_kwargs['permissions'] = user_permissions
+
             if params.pop('user_mentions', None):
                 handler_kwargs['user_mentions'] = list(map(message.server.get_member, message.raw_mentions))
+
             if params.pop('channel_mentions', None):
                 handler_kwargs['channel_mentions'] = list(map(message.server.get_channel, message.raw_channel_mentions))
+
             if params.pop('voice_channel', None):
                 handler_kwargs['voice_channel'] = message.server.me.voice_channel
+
             if params.pop('leftover_args', None):
                 handler_kwargs['leftover_args'] = args
+
             args_expected = []
             for key, param in list(params.items()):
                 doc_key = '[%s=%s]' % (key, param.default) if param.default is not inspect.Parameter.empty else key
                 args_expected.append(doc_key)
+
                 if not args and param.default is not inspect.Parameter.empty:
                     params.pop(key)
                     continue
-                    if args:
-                        arg_value = args.pop(0)
-                        handler_kwargs[key] = arg_value
-                        params.pop(key)
+
+                if args:
+                    arg_value = args.pop(0)
+                    handler_kwargs[key] = arg_value
+                    params.pop(key)
 
             if message.author.id != self.config.owner_id:
                 if user_permissions.command_whitelist and command not in user_permissions.command_whitelist:
-                    raise exceptions.PermissionsError('This command is not enabled for your group (%s).' % user_permissions.name, expire_in=20)
+                    raise exceptions.PermissionsError(
+                        "This command is not enabled for your group (%s)." % user_permissions.name,
+                        expire_in=20)
+
                 elif user_permissions.command_blacklist and command in user_permissions.command_blacklist:
-                    raise exceptions.PermissionsError('This command is disabled for your group (%s).' % user_permissions.name, expire_in=20)
-                if params:
-                    docs = getattr(handler, '__doc__', None)
-                    if not docs:
-                        docs = 'Usage: {}{} {}'.format(self.config.command_prefix, command, ' '.join(args_expected))
-                    docs = '\n'.join((l.strip() for l in docs.split('\n')))
-                    await self.safe_send_message(message.channel, '```\n%s\n```' % docs.format(command_prefix=self.config.command_prefix), expire_in=60)
-                    return
-                response = await (handler(**handler_kwargs))
-                if response and isinstance(response, Response):
-                    content = response.content
-                    if response.reply:
-                        content = '%s, %s' % (message.author.mention, content)
-                    sentmsg = await (self.safe_send_message(message.channel, content, expire_in=response.delete_after if self.config.delete_messages else 0, also_delete=message if self.config.delete_invoking else None))
+                    raise exceptions.PermissionsError(
+                        "This command is disabled for your group (%s)." % user_permissions.name,
+                        expire_in=20)
+
+            if params:
+                docs = getattr(handler, '__doc__', None)
+                if not docs:
+                    docs = 'Usage: {}{} {}'.format(
+                        self.config.command_prefix,
+                        command,
+                        ' '.join(args_expected)
+                    )
+
+                docs = '\n'.join(l.strip() for l in docs.split('\n'))
+                await self.safe_send_message(
+                    message.channel,
+                    '```\n%s\n```' % docs.format(command_prefix=self.config.command_prefix),
+                    expire_in=60
+                )
+                return
+
+            response = await handler(**handler_kwargs)
+            if response and isinstance(response, Response):
+                content = response.content
+                if response.reply:
+                    content = '%s, %s' % (message.author.mention, content)
+
+                sentmsg = await self.safe_send_message(
+                    message.channel, content,
+                    expire_in=response.delete_after if self.config.delete_messages else 0,
+                    also_delete=message if self.config.delete_invoking else None
+                )
+
         except (exceptions.CommandError, exceptions.HelpfulError, exceptions.ExtractionError) as e:
-            print('{0.__class__}: {0.message}'.format(e))
+            print("{0.__class__}: {0.message}".format(e))
+
             expirein = e.expire_in if self.config.delete_messages else None
             alsodelete = message if self.config.delete_invoking else None
-            await self.safe_send_message(message.channel, '```\n%s\n```' % e.message, expire_in=expirein, also_delete=alsodelete)
+
+            await self.safe_send_message(
+                message.channel,
+                '```\n%s\n```' % e.message,
+                expire_in=expirein,
+                also_delete=alsodelete
+            )
+
         except exceptions.Signal:
             raise
+
         except Exception:
             traceback.print_exc()
             if self.config.debug_mode:
@@ -1876,43 +1943,61 @@ class HyperBot(discord.Client):
     async def on_voice_state_update(self, before, after):
         if not all([before, after]):
             return
+
         if before.voice_channel == after.voice_channel:
             return
+
         if before.server.id not in self.players:
             return
-        my_voice_channel = after.server.me.voice_channel
+
+        my_voice_channel = after.server.me.voice_channel  # This should always work, right?
+
         if not my_voice_channel:
             return
+
         if before.voice_channel == my_voice_channel:
             joining = False
+        elif after.voice_channel == my_voice_channel:
+            joining = True
         else:
-            if after.voice_channel == my_voice_channel:
-                joining = True
-            else:
-                return
-            moving = before == before.server.me
-            auto_paused = self.server_specific_data[after.server]['auto_paused']
-            player = await (self.get_player(my_voice_channel))
-            if after == after.server.me and after.voice_channel:
-                player.voice_client.channel = after.voice_channel
-            if not self.config.auto_pause:
-                return
-            if sum((1 for m in my_voice_channel.voice_members if m != after.server.me)):
-                if auto_paused and player.is_paused:
-                    print('[config:autopause] Unpausing')
-                    self.server_specific_data[after.server]['auto_paused'] = False
-                    player.resume()
-            elif not auto_paused and player.is_playing:
-                print('[config:autopause] Pausing')
+            return  # Not my channel
+
+        moving = before == before.server.me
+
+        auto_paused = self.server_specific_data[after.server]['auto_paused']
+        player = await self.get_player(my_voice_channel)
+
+        if after == after.server.me and after.voice_channel:
+            player.voice_client.channel = after.voice_channel
+
+        if not self.config.auto_pause:
+            return
+
+        if sum(1 for m in my_voice_channel.voice_members if m != after.server.me):
+            if auto_paused and player.is_paused:
+                print("[config:autopause] Unpausing")
+                self.server_specific_data[after.server]['auto_paused'] = False
+                player.resume()
+        else:
+            if not auto_paused and player.is_playing:
+                print("[config:autopause] Pausing")
                 self.server_specific_data[after.server]['auto_paused'] = True
                 player.pause()
 
-    async def on_server_update(self,  *,before: discord.Server, after: discord.Server):
+    async def on_server_update(self, before:discord.Server, after:discord.Server):
         if before.region != after.region:
-            self.safe_print('[Servers] "%s" changed regions: %s -> %s' % (after.name, before.region, after.region))
+            self.safe_print("[Servers] \"%s\" changed regions: %s -> %s" % (after.name, before.region, after.region))
+
             await self.reconnect_voice_client(after)
 
 
 if __name__ == '__main__':
-    bot = Musicbot()
+    for extension in startup_extensions:
+        try:
+            bot.load_extension(extension)
+        except Exception as e:
+            exc = '{}: {}'.format(type(e).__name__, e)
+            print('Failed to load extension {}\n{}'.format(extension, exc))
+
+    bot = Hyperbot()
     bot.run()
