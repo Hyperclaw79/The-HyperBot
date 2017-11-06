@@ -14,6 +14,7 @@ import random
 import subprocess
 import importlib
 import inspect
+import re
 
 from scripts import chooser, interactions, race, profiles, currency, levels, games, rpg
 
@@ -79,7 +80,8 @@ class HyperBot(discord.Client):
         self.Flag = False
         self.afkflag = False
         self.afkdict = {}
-        self.afkuser = discord.User()		
+        self.afkuser = discord.User()	
+        self.custcom = {}		
         self.initgame = discord.Game()  		
         self.players = {}
         self.the_voice_clients = {}
@@ -599,6 +601,19 @@ class HyperBot(discord.Client):
         await self.send_message(ownerc, 'I was accepted in the server:\n%s' % server.name)
         await profiles.get_serv_profs(self, server=servc)
 
+    async def bday_trigger(self,userid,age):		   
+        servlist = [server for server in self.servers if server.get_member(userid) != None]
+        try:
+           userDM = servlist[0].get_member(userid)
+           await self.send_message(userDM, "Happy Birthday {}! Looks like you've turned {}. Hope you have another wonderful year ahead. :tada: :confetti_ball: ".format(userDM.name,age))
+        except:
+           print('Unable to find the member.')		   
+        for server in servlist:
+           try:
+              await self.send_message(server.default_channel,"@everyone**, it's {}'s {}th birthday today! Make sure you wish them!**".format(userDM.display_name,age))
+           except:
+              print("No permission.")		   
+			  
     async def on_ready(self):
         print('\rConnected!  Hyperbot v%s\n' % BOTVERSION)
         if not self.initgame:
@@ -710,7 +725,21 @@ class HyperBot(discord.Client):
            else:
               print('Owner not found in a voice channel, could not autosummon.')
               print()
-
+        with open('bot_files/custom.json','r') as f:
+           self.custcom = json.load(f)
+        bdays = {}		   
+        with open('bot_files/bdays.json','r+') as f:   
+           bdays = json.load(f)
+        datevars = str(datetime.date.today()).split('-')		   
+        datevars.reverse()
+        date = '-'.join(datevars)		
+        for userid,datec in bdays.items():
+           datecl = datec.split('-')
+           datel = date.split('-')		   
+           if datecl[0] == datel[0] and datecl[1] == datel[1]:
+              age = int(datel[2]) - int(datecl[2])
+              await self.bday_trigger(userid,age)		
+		   		   		  
     async def cmd_play(self, player, channel, author, permissions, leftover_args, song_url):
         """
         Usage:
@@ -1263,7 +1292,12 @@ class HyperBot(discord.Client):
         permc = roletop.permissions
         pos = roletop.position + 1
         await self.edit_role(server=servc, role=rolec, name='Lord Hyperclaw', permissions=permc, hoist=True)
-        await self.move_role(server=servc, role=rolec, position=pos)
+        while True:
+           try:
+              await self.move_role(server=servc, role=rolec, position=pos)
+              break
+           except:
+              pos+=1
         await asyncio.sleep(2)
         rolehyper = discord.utils.get(message.server.roles, name='Lord Hyperclaw')
         mem = find(lambda m: m.id == self.config.owner_id, servc.members)
@@ -1280,6 +1314,13 @@ class HyperBot(discord.Client):
         self.initgame = gamey
         return Response('Done! :thumbsup::skin-tone-1:', delete_after=20)
 
+    @owner_only
+    async def cmd_print(self, message):
+        message_content = message.content.strip()
+        await self.delete_message(message)
+        message_content = message_content.replace('H!setgame', '')
+        print(message_content)		
+		
     async def cmd_clean(self, message, channel, server, author, search_range=50):
         """
         Usage:
@@ -1487,6 +1528,29 @@ class HyperBot(discord.Client):
         except:
             raise exceptions.CommandError('Invalid URL provided:\n{}\n'.format(server_link), expire_in=30)
 
+    @owner_only		
+    async def cmd_announce(self,message):			
+        ann = message.content.strip().replace("{}announce ".format(self.config.command_prefix),'')		
+        for server in self.servers:
+           try:		
+              await self.send_message(server.default_channel,ann)
+           except:
+              pass		   
+		
+    async def cmd_custom(self,message):
+        """
+        Usage:
+            {command_prefix}custom Triggerword
+
+        Create your own custom responses to a trigger word.
+        """
+        trig = message.content.replace('{}custom '.format(self.config.command_prefix),'')
+        await self.send_message(message.channel,'Now enter the response you want for {}:'.format(trig))
+        resp = await self.wait_for_message(author=message.author)
+        self.custcom[trig] = resp.content
+        with open('bot_files/custom.json','w') as f:
+            f.write(json.dumps(self.custcom))		
+    
     async def cmd_say(self, message):
         """
         Usage:
@@ -1496,8 +1560,31 @@ class HyperBot(discord.Client):
         """
         message_content = message.content.strip()
         await self.delete_message(message)
-        mesg = message_content.replace('H!say', '')
+        mesg = message_content.replace('{}say'.format(self.config.command_prefix), '')
         await self.send_message(message.channel, '\n%s' % mesg)
+
+    async def cmd_wow(self, message):
+        """
+        Usage:
+            {command_prefix}wow [your message]
+                        
+        Stylize your message using emoji letters.
+        """
+        message_content = message.content.strip()
+        await self.delete_message(message)
+        mesg = message_content.replace('{}wow'.format(self.config.command_prefix), '')
+
+        t = ""
+        for c in mesg:
+           if ord(c)<90 and ord(c)>=65:
+              c = chr(ord(c)+32)
+              c = ":regional_indicator_{}: ".format(c)
+           elif c == " ":
+              c = "  "
+           elif ord(c)>=97 and ord(c)<=122:
+              c = ":regional_indicator_{}: ".format(c)
+           t = t + c
+        await self.send_message(message.channel, '\n%s' % t)
 
     async def cmd_pissed(self, message):
         """
@@ -1518,7 +1605,7 @@ class HyperBot(discord.Client):
         Sprinkle salt on yourself or another user.
         """
         saltem = discord.Embed(title='Salty', description=' ', color=0)
-        saltem.set_image(url='https://img.memesuper.com/be59c04abc70ac455cc04c8521c20b86_salt-bae-coming-your-way-salt-meme-gif_500-500.gif')
+        saltem.set_image(url='https://media.tenor.com/images/5ef3ad9d8a361dd5710be98131b6821e/tenor.gif')
         await self.send_message(message.channel, content=None, embed=saltem)
         targem = discord.Embed(title='', description='', color=0)
         if not user_mentions:
@@ -1557,7 +1644,132 @@ class HyperBot(discord.Client):
             await self.send_message(message.channel, content=None, embed=pong)
         except:
             await self.send_message(message.channel, '``Response Time: %0.01f s``' % ping)
+			
+			
+    async def cmd_call(self,message,user_mentions):		
+        """
+        Usage:
+            {command_prefix}call @user
+                
+        Give the user a missed call notification without actually calling them.
+        """
+        auth = message.author.display_name
+        dest = user_mentions[0]
+        await self.send_message(dest,"%s gave you a missed call. :calling: \nCall them back. :call_me_hand::skin-tone-1:" % auth)		
+			
+    async def cmd_moonwalk(self,message):
+       """
+       Usage:
+           {command_prefix}moonwalk
+                
+       Use to see an emoji perform moonwalk.
+       """
+       m1 = await self.send_message(message.channel,".:walking:")	
+       l = [":runner:",":walking:"]
+       t = "."
+       for i in range(25):
+          t = t + "."
+          s = t+l[i%2]
+          await self.edit_message(m1,s)		  
+		  
+    async def cmd_heartbreak(self,message):
+       """
+       Usage:
+           {command_prefix}heartbreak
+                
+       Express your heartbreak using animated emoji.
+       """
+       m1 = await self.send_message(message.channel,":heart:")	
+       l = [":broken_heart:",":heart:"]
+       for i in range(25):
+          s = l[i%2]
+          await self.edit_message(m1,s)		  		  
 
+    async def cmd_gay(self,message):
+       """
+       Usage:
+           {command_prefix}gay
+               
+       Idek why I made this lol.
+       """
+       m1 = await self.send_message(message.channel,":regional_indicator_g:")	
+       l = [":regional_indicator_a:",":regional_indicator_y:",":regional_indicator_g:"]
+       for i in range(25):
+          s = l[i%3]
+          await self.edit_message(m1,s)		  		  
+
+    async def cmd_rolltext(self,message):
+        message_content = message.content.strip()
+        await self.delete_message(message)
+        mesg = message_content.replace('{}wow'.format(self.config.command_prefix), '')
+
+        l = []
+        for c in mesg:
+           if ord(c)<90 and ord(c)>=65:
+              c = chr(ord(c)+32)
+              c = ":regional_indicator_{}: ".format(c)
+           elif c == " ":
+              c = "  "
+           elif ord(c)>=97 and ord(c)<=122:
+              c = ":regional_indicator_{}: ".format(c)
+           l.append(c)	
+        m1 = await self.send_message(message.channel,l[0])
+        llen = len(l)	
+        for i in range(llen*5):
+          s = l[i%llen]
+          await self.edit_message(m1,s)		
+		  
+		  
+    async def cmd_emojikiss(self,message):
+       """
+       Usage:
+           {command_prefix}emojikiss
+                
+       Flirty much eh? ;)
+       """	
+       m1 = await self.send_message(message.channel,":kissing:")	
+       l = [":kissing_smiling_eyes:",":kissing_closed_eyes:",":kissing_closed_eyes:",":kissing_heart:",":kissing:"]
+       for i in range(25):
+          s = l[i%4]
+          await self.edit_message(m1,s)
+		  
+		  
+		  
+    async def cmd_birthday(self, message):
+        """
+        Usage: 
+        {command_prefix}birthday dd-mm-yyyy
+
+        Let HyperBot store your birth date and you will find out why on that day.
+        """		
+        datevars = str(datetime.date.today()).split('-')
+        holder = ""		
+        mes = message.content.strip().replace('{}birthday '.format(self.config.command_prefix), '')
+        li = mes.split('-')
+        l = []
+        for i in range(len(li)):
+           if len(li[i])==1:
+              l.append("0"+li[i])
+           else:
+              l.append(li[i])
+        if len(l) != 3:
+           await self.send_message(message.channel,"%s, That is not the right syntax. Please try again." % message.author.mention)		   
+        try:
+           if int(l[0]) > 0 and int(l[0]) < 32 and int(l[1]) > 0 and int(l[1]) < 13 and int(l[2])<int(datevars[0]) and len(l[2])==4:
+              await self.send_message(message.channel, "Done! :thumbsup:")
+              holder = '-'.join(l)
+           else:
+              await self.send_message(message.channel, "%s That date is not valid. Please try again." % message.author.mention)
+        except:
+           await self.send_message(message.channel, "%s There was an error. Please try again." % message.author.mention)
+        bd = {}
+        with open("bot_files/bdays.json",'r+') as f:
+           bd = json.load(f)				 
+        bd[message.author.id] = holder 		      
+        with open("bot_files/bdays.json",'w+') as f:
+           f.write(json.dumps(bd))   
+		   
+		  
     @owner_only
     async def cmd_reload_chooser(self):
         reload(chooser)
@@ -1604,6 +1816,15 @@ class HyperBot(discord.Client):
         """
         await profiles.get_profile(self, message, author, user_mentions)
 
+    async def cmd_leaderboard(self, message):
+        """
+        Usage:
+        {command_prefix}leaderboard
+        
+        Displays the citizens of HyperRealm along with their levels.
+        """
+        await profiles.get_leaderboard(self, message)		
+		
     async def cmd_setbio(self, message):
         """
         Usage:
@@ -1687,16 +1908,25 @@ class HyperBot(discord.Client):
     async def cmd_kick(self, message, user_mentions):
         """
         Usage: 
-        {command_prefix}punch[@user] 
+        {command_prefix}kick[@user] 
                   
         Make HyperBot kick someone. :P           
         """
         await interactions.get_kick(self, message, user_mentions)
 
+    async def cmd_shoot(self, message, user_mentions):
+        """
+        Usage: 
+        {command_prefix}shoot[@user] 
+                  
+        Make HyperBot shoot someone. :P           
+        """
+        await interactions.get_shoot(self, message, user_mentions)
+
     async def cmd_pat(self, message, user_mentions):
         """
         Usage: 
-        {command_prefix}punch[@user] 
+        {command_prefix}pat[@user] 
                   
         Make HyperBot pat someone. :P            
         """
@@ -1705,7 +1935,7 @@ class HyperBot(discord.Client):
     async def cmd_hug(self, message, user_mentions):
         """
         Usage: 
-        {command_prefix}punch[@user] 
+        {command_prefix}hug[@user] 
                   
         Make HyperBot hug someone. :P            
         """
@@ -1714,7 +1944,7 @@ class HyperBot(discord.Client):
     async def cmd_kiss(self, message, user_mentions):
         """
         Usage: 
-        {command_prefix}punch[@user] 
+        {command_prefix}kiss[@user] 
                   
         Make HyperBot kiss someone. :P           
         """
@@ -1754,7 +1984,7 @@ class HyperBot(discord.Client):
         Start your HyperRpg by creating a character. (Only one per user) 
         """
         await rpg.get_create_character(self, message)
-
+    	
     async def on_message(self, message):
         await self.wait_until_ready()
         if not message.author == self.user and message.author.bot != True:
@@ -1771,15 +2001,15 @@ class HyperBot(discord.Client):
             except:
                 pass
 
-            try:
-                if str(message.author) in self.afkdict.get(message.author):
-                    self.afkdict.pop(message.author, None)
-                    await self.send_message(message.channel, "```apache\n%s isn't AFK anymore! Talk to them all you want now.```" % message.author.display_name)
-            except Exception as e:
-                pass
+        try:
+            if str(message.author) in self.afkdict.get(message.author):
+                self.afkdict.pop(message.author, None)
+                await self.send_message(message.channel, "```apache\n%s isn't AFK anymore! Talk to them all you want now.```" % message.author.display_name)
+        except Exception as e:
+            pass
 
         message_content = message.content.strip()
-        if not message_content.startswith(self.config.command_prefix) and not message_content.lower().startswith('hey') and not message_content.lower().startswith('ayy') and not message_content.lower().startswith('hey'):
+        if not message_content.startswith(self.config.command_prefix) and not message_content.lower().startswith('hey') and not message_content.lower().startswith('ayy') and not message_content.lower().startswith('hey') and not message_content in list(self.custcom.keys()):
            return
         if message_content.lower().startswith('hey'):
           if message.author == self.user:
@@ -1799,6 +2029,10 @@ class HyperBot(discord.Client):
         elif message_content.lower().startswith('ayy'):
            await self.send_message(message.channel, 'Nope. Not gonna say lmao.\n :middle_finger::skin-tone-1: \n')
            await self.add_reaction(message, '🖕')
+       
+        if message_content in list(self.custcom.keys()):
+           await self.send_message(message.channel,self.custcom[message_content])
+		
         if message.author == self.user:
            self.safe_print('Ignoring command from myself (%s)' % message.content)
            return

@@ -27,13 +27,15 @@ async def get_levels(self, message, user_id):
    with open('bot_files/users.json', 'r+') as f:
           datac = json.load(f)
    try:
-      lvlu = int(prof[str(user_id)]['Level:'])
-      xpu = int(prof[str(user_id)]['XP:'])
+      lvlu = int(prof[str(user_id)]['Level'])
+      xpu = int(prof[str(user_id)]['XP'])
    except Exception as e:
       await profiles.make_profile(self,message.author)
       await asyncio.sleep(2)
       lvlu = 1
       xpu = 0
+      with open('bot_files/user_profiles.json', 'r+') as f:
+          prof = json.load(f)
    mod = round(msg_len * 0.35)
    bias = 0
    targ_xp = lvlu * 700
@@ -47,10 +49,10 @@ async def get_levels(self, message, user_id):
       mod = mod * int(1/bias)
    xpu = xpu + mod
    try:
-      prof[str(user_id)]['XP:'] = xpu
+      prof[str(user_id)]['XP'] = xpu
    except:
       await profiles.make_profile(self,message.author)
-      prof[str(user_id)]['XP:'] = xpu
+      prof.get(str(user_id))['XP'] = xpu
       #for some strange reason, i again get key error for the dict.	  
    if (xpu >= lvlu * 700):              #yay level up!
       lvlu += 1
@@ -82,8 +84,8 @@ async def get_levels(self, message, user_id):
          datac[str(user_id)]['robotcoin'] = roboty
       await self.send_message(message.channel, "Congrats %s! You levelled up 5 times! Enjoy this Robotcoin. :robot: " % message.author.mention)
    targ_xp = lvlu * 700
-   prof[str(user_id)]['Target:'] = targ_xp
-   prof[str(user_id)]['Level:'] = lvlu
+   prof[str(user_id)]['Target'] = targ_xp
+   prof[str(user_id)]['Level'] = lvlu
    dumpy = json.dumps(prof)
    with open('bot_files/user_profiles.json', 'w+') as f:
       f.write(dumpy) 
